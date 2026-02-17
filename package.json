@@ -1,7 +1,7 @@
 {
   "name": "agent-content-pipeline",
-  "version": "0.2.3",
-  "description": "Safe content automation for AI agents. Draft → Approve → Post.",
+  "version": "0.3.0",
+  "description": "Safe content automation for AI agents. Draft → Review → Revise (via pi) → Approve → Post.",
   "license": "MIT",
   "author": "Lars de Ridder <lars@xithing.io>",
   "repository": {
@@ -15,7 +15,10 @@
     "content",
     "automation",
     "social-media",
-    "openclaw"
+    "pi",
+    "linkedin",
+    "devto",
+    "hashnode"
   ],
   "type": "module",
   "bin": {
