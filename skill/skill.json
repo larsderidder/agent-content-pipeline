@@ -1,10 +1,10 @@
 {
   "name": "agent-content-pipeline",
-  "version": "0.2.3",
-  "description": "Safe content automation for AI agents with cryptographic approval. Draft, review, approve, and post to LinkedIn and X (Reddit experimental).",
+  "version": "0.3.0",
+  "description": "Safe content workflow (drafts/reviewed/revised/approved/posted) with human-in-the-loop approval. pi rewrites drafts in your voice. Post to LinkedIn, X, Reddit, dev.to, and Hashnode.",
   "author": "Lars de Ridder <lars@xithing.io>",
   "homepage": "https://github.com/larsderidder/agent-content-pipeline",
-  "keywords": ["content", "social-media", "linkedin", "twitter", "x", "reddit", "drafting", "review", "approval", "security", "openclaw"],
+  "keywords": ["content", "social-media", "linkedin", "x", "twitter", "reddit", "devto", "hashnode", "drafting", "review", "approval"],
   "requires": {
     "cli": ["content", "content-pipeline"]
   },

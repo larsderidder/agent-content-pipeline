@@ -7,61 +7,69 @@ You have access to a content drafting system with human approval. Here's how to 
 ✅ **Can do:**
 - Write new drafts to `drafts/`
 - Read all content (drafts, reviewed, revised, approved, posted, templates)
-- Revise drafts based on feedback
-- Move reviewed files to revised using: `content mv revised <file>`
 - Add notes to the thread: `content thread <file> --from agent`
+- Run `content list` to see pending content
 
 ❌ **Cannot do:**
+- Move files between folders (the pipeline handles this automatically)
 - Move files to `approved/` or `posted/` (human only)
 - Set `status: approved` in frontmatter
 - Set `approved_by` field
 - Post content directly to any platform
 
+## How the pipeline works
+
+When the human reviews a draft and gives feedback, **pi automatically rewrites it** and moves it to `revised/`. You do not need to revise drafts yourself.
+
+```
+drafts/ → reviewed/ → revised/ → approved/ → posted/
+  you       human      pi          human       human
+  write     reviews    rewrites    approves    posts
+```
+
+Your job is to write a good initial draft. The rewrite loop is handled automatically.
+
 ## Creating a draft
 
-1. Create file: `drafts/YYYY-MM-DD-<platform>-<slug>.md`
-2. Use this frontmatter:
+File naming: `drafts/YYYY-MM-DD-<platform>-<slug>.md`
 
 ```yaml
 ---
-platform: linkedin    # linkedin | x | reddit
-title: "Optional"
+platform: linkedin    # linkedin | x | reddit | devto | hashnode
+title: "Required for reddit, devto, hashnode"
 status: draft
 subreddit: programming  # Required for Reddit
+tags: [tag1, tag2]      # Optional, used by devto/hashnode
 ---
-```
 
-3. Write your content below the frontmatter
-4. Tell the human the draft is ready for review
+Your content here.
+```
 
 ## Platform guidelines
 
 ### LinkedIn
-- Professional tone
-- 1-3 short paragraphs work best
-- End with question or CTA for engagement
-- Hashtags at the end (3-5 max)
+- Professional but human
+- 1-3 paragraphs ideal
+- End with question or CTA
+- 3-5 hashtags at end
 
 ### X (Twitter)
-- 280 char limit per tweet (threads supported)
+- 280 chars per tweet
 - Use `---` to separate tweets in a thread
-- Punchy, direct language
+- Punchy, direct
 - 1-2 hashtags max
 
 ### Reddit (experimental)
-- Title from frontmatter or first line
-- Markdown supported
-- Match subreddit rules and tone
+- Title required in frontmatter
+- Match each subreddit's rules and tone
+
+### dev.to / Hashnode
+- Full markdown article
+- Title required in frontmatter
+- Tags as array of slugs
 
 ## Templates
 
-Check `templates/` for examples. Copy and modify.
+Check `templates/` for examples.
 
-## What happens next
-
-1. Human reviews your draft
-2. If feedback: you revise and run `content mv revised <file>`
-3. Human reviews again and approves
-4. Posting happens manually
-
-You'll never see the posting happen — that's intentional for safety.
+You'll never see posting happen — that's intentional for safety.

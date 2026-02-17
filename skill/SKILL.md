@@ -1,151 +1,107 @@
 ---
 name: agent-content-pipeline
-description: Safe content workflow (drafts/reviewed/revised/approved/posted) with human-in-the-loop approval, plus CLI to list/move/review and post to LinkedIn/X. Use when setting up a content pipeline, drafting content, managing review threads, or posting approved content.
+description: Safe content workflow (drafts/reviewed/revised/approved/posted) with human-in-the-loop approval. pi rewrites drafts automatically on feedback. Post to LinkedIn, X, Reddit, dev.to, and Hashnode. Use when setting up a content pipeline, drafting content, managing review threads, or posting approved content.
 ---
 
 # Content Pipeline Skill
 
-Safe content automation with human-in-the-loop approval. Draft → Review → Approve → Post.
+Safe content automation with human-in-the-loop approval. Draft → Review → Revise (via pi) → Approve → Post.
 
 ## Setup
 
 ```bash
 npm install -g agent-content-pipeline
-content init . # Creates folders + global config (in current directory)
-```
-
-For cryptographic approval signatures (password-protected):
-```bash
-content init . --secure
+content init .
 ```
 
 This creates:
-- `drafts/` — work in progress (one post per file)
-- `reviewed/` — human reviewed, awaiting your revision
-- `revised/` — you revised, ready for another look
+- `drafts/` — write your drafts here
+- `reviewed/` — human reviewed, pi is rewriting
+- `revised/` — rewritten, ready for another look
 - `approved/` — human-approved, ready to post
 - `posted/` — archive after posting
-- `templates/` — review and customize before use
-- `.content-pipeline/threads/` — feedback thread logs (not posted)
+- `templates/` — platform templates
 
 ## Your Permissions
 
 ✅ **Can do:**
 - Write to `drafts/`
 - Read all content directories
-- Revise drafts based on feedback
-- Move revised files to `revised/`
+- Add notes: `content thread <file> --from agent`
 - Run `content list` to see pending content
 
 ❌ **Cannot do:**
-- Move files to `approved/` (only the human can approve)
+- Move files between folders (the pipeline does this automatically)
+- Move files to `approved/` or `posted/` (human only)
 - Post content
 - Set `status: approved`
 
-## Creating Content
+## How the Pipeline Works
 
-**One post per file.** Each suggestion or draft should be a single post, not a collection.
+When the human reviews a draft and gives feedback, **pi automatically rewrites the draft** and moves it to `revised/`. You do not need to revise drafts yourself.
+
+```
+drafts/ → reviewed/ → revised/ → approved/ → posted/
+  you       human      pi          human       human
+  write     reviews    rewrites    approves    posts
+```
+
+Your job is to write good initial drafts. The rewrite loop is handled automatically.
+
+## Creating a Draft
 
 File naming: `YYYY-MM-DD-<platform>-<slug>.md`
 
-Use frontmatter:
-
 ```yaml
 ---
-platform: linkedin    # linkedin | x | reddit (experimental)
-title: Optional Title
+platform: linkedin    # linkedin | x | reddit | devto | hashnode
+title: "Required for reddit, devto, hashnode"
 status: draft
 subreddit: programming  # Required for Reddit
+tags: [tag1, tag2]      # Optional, used by devto/hashnode
 ---
 
 Your content here.
 ```
 
-Tell the human: "Draft ready for review: `content review <filename>`"
-
-## The Review Loop
-
-```
-drafts/ → reviewed/ → revised/ → approved/ → posted/
-              ↑          │
-              └──────────┘
-               more feedback
-```
-
-1. You write draft to `drafts/`
-2. Human runs `content review <file>`:
-   - **With feedback** → file moves to `reviewed/`, you get notified
-   - **No feedback** → human is asked "Approve?" → moves to `approved/`
-3. If feedback: you revise and move to `revised/`
-4. Human reviews from `revised/`:
-   - More feedback → back to `reviewed/`
-   - Approve → moves to `approved/`
-5. Posting happens manually via `content post`
-
-### After Receiving Feedback
-
-When you get review feedback:
-1. Read the file from `reviewed/`
-2. Apply the feedback
-3. Move the file to `revised/`
-4. Confirm what you changed
-5. (Optional) Add a note: `content thread <file> --from agent`
-
 ## Platform Guidelines
 
 ### LinkedIn
 - Professional but human
-- Idiomatic language (Dutch for NL audiences, don't be stiff)
 - 1-3 paragraphs ideal
 - End with question or CTA
 - 3-5 hashtags at end
 
 ### X (Twitter)
-- 280 chars per tweet (unless paid account)
+- 280 chars per tweet
+- Use `---` to separate tweets in a thread
 - Punchy, direct
 - 1-2 hashtags max
-- Use threads sparingly
-- If Firefox auth fails, you can paste `auth_token` and `ct0` manually
-
-Manual cookie steps:
-1) Open x.com and log in
-2) Open DevTools → Application/Storage → Cookies → https://x.com
-3) Copy `auth_token` and `ct0`
 
 ### Reddit (experimental)
-- Treat as experimental; API and subreddit rules can change
-- Requires `subreddit:` in frontmatter
-- Title comes from frontmatter `title:` (or first line if missing)
+- Title required in frontmatter
 - Match each subreddit's rules and tone
+
+### dev.to / Hashnode
+- Full markdown article
+- Title required in frontmatter
+- Tags as array of slugs
 
 ## Commands Reference
 
 ```bash
-content list                    # Show drafts and approved
-content review <file>           # Review: feedback OR approve
-content mv <dest> <file>        # Move file to drafts/reviewed/revised/approved/posted
-content edit <file>             # Open in editor ($EDITOR or code)
+content list                    # Show all folders with timestamps
+content review <file>           # Review: give feedback (pi rewrites) or approve
+content edit <file>             # Open in editor
 content post <file>             # Post (prompts for confirmation)
 content post <file> --dry-run   # Preview without posting
 content thread <file>           # Add a note to the feedback thread
+content platforms               # List available platforms
 ```
 
 ## Security Model
 
-The security model separates drafting (AI) from approval/posting (human):
-
 - ✅ Agent drafts content
-- ✅ Agent revises based on feedback  
-- ❌ Agent cannot approve (human approves via `content review`)
-- ❌ Agent cannot post
+- ❌ Agent cannot approve or post (human only)
 
-Posting is handled manually via CLI — never by the agent directly.
-
-### Platform-specific security
-
-| Platform | Auth Storage | Encrypted? | Password Required? |
-|----------|--------------|------------|-------------------|
-| LinkedIn | Browser profile | ✅ Yes | ✅ Yes |
-| X/Twitter | Firefox tokens | ✅ Yes | ✅ Yes |
-
-Both platforms require password to post. Tokens are extracted from Firefox and encrypted locally.
+Posting is handled manually via CLI.
