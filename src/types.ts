@@ -49,10 +49,6 @@ export interface ContentKitConfig {
   dryRun: boolean;
   requireApproval: boolean;
   approvalField: string;
-  /** Path to clawdbot CLI (for review notifications) */
-  clawdbotPath?: string;
-  /** Target for clawdbot notifications (e.g., "telegram:lars" or "discord:channel-id"). If not set, uses internal session. */
-  clawdbotTarget?: string;
   /** Require approval signatures (set by init --secure) */
   requireSignature?: boolean;
   /** Optional X profile dir (use existing Chrome/Chromium profile) */

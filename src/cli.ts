@@ -231,37 +231,13 @@ program
     // Create config if missing
     const localConfigPath = join(targetDir, '.content-pipeline.json');
     if (!existsSync(localConfigPath)) {
-      // Try to auto-detect clawdbot
-      let clawdbotPath: string | undefined;
-      try {
-        clawdbotPath = execSync('which clawdbot 2>/dev/null || command -v clawdbot 2>/dev/null', { encoding: 'utf8' }).trim();
-      } catch {
-        // Not in PATH, try common locations
-        const commonPaths = [
-          join(homedir(), '.nvm/versions/node', process.version, 'bin/clawdbot'),
-          '/usr/local/bin/clawdbot',
-          '/opt/homebrew/bin/clawdbot',
-        ];
-        for (const p of commonPaths) {
-          if (existsSync(p)) {
-            clawdbotPath = p;
-            break;
-          }
-        }
-      }
-      
       const config: Record<string, unknown> = {
         contentDir: targetDir,
         plugins: [],
         dryRun: true,
         requireApproval: true,
       };
-      
-      if (clawdbotPath) {
-        config.clawdbotPath = clawdbotPath;
-        console.log(chalk.green(`✓ Found clawdbot — review feedback will notify your agent`));
-      }
-      
+
       writeFileSync(localConfigPath, JSON.stringify(config, null, 2));
       console.log(chalk.green(`✓ Created ${localConfigPath}`));
     }
@@ -297,15 +273,23 @@ You have access to a content drafting system with human approval. Here's how to 
 ✅ **Can do:**
 - Write new drafts to \`drafts/\`
 - Read all content (drafts, reviewed, revised, approved, posted, templates)
-- Revise drafts based on feedback
-- Move reviewed files to revised using: \`content mv revised <file>\`
 - Add notes to the thread: \`content thread <file> --from agent\`
 
 ❌ **Cannot do:**
+- Move files between folders (the pipeline handles this automatically)
 - Move files to \`approved/\` or \`posted/\` (human only)
 - Set \`status: approved\` in frontmatter
 - Set \`approved_by\` field
 - Post content directly to any platform
+
+## How the pipeline works
+
+1. You write a draft to \`drafts/\`
+2. The human reviews it with \`content review <file>\`
+3. If they give feedback, pi rewrites the draft automatically and moves it to \`revised/\`
+4. The human reviews the revision — if happy, they approve and post
+
+You do not need to revise drafts yourself. The rewrite step is handled by pi using the scribe skill.
 
 ## Creating a draft
 
@@ -314,23 +298,23 @@ You have access to a content drafting system with human approval. Here's how to 
 
 \`\`\`yaml
 ---
-platform: linkedin    # linkedin | x | reddit
-title: "Optional"
+platform: linkedin    # linkedin | x | reddit | devto | hashnode
+title: "Required for reddit, devto, hashnode"
 status: draft
 subreddit: programming  # Required for Reddit
+tags: [tag1, tag2]      # Optional, used by devto/hashnode
 ---
 \`\`\`
 
 3. Write your content below the frontmatter
-4. Tell the human the draft is ready for review
 
 ## Platform guidelines
 
 ### LinkedIn
 - Professional tone
-- 1-3 short paragraphs work best
-- End with question or CTA for engagement
-- Hashtags at the end (3-5 max)
+- 1-3 short paragraphs
+- End with a question or CTA
+- 3-5 hashtags at the end
 
 ### X (Twitter)
 - 280 char limit per tweet (threads supported)
@@ -341,20 +325,17 @@ subreddit: programming  # Required for Reddit
 ### Reddit (experimental)
 - Title from frontmatter or first line
 - Markdown supported
-- Match subreddit rules and tone
+
+### dev.to / Hashnode
+- Title required in frontmatter
+- Full markdown article
+- Tags as array of slugs
 
 ## Templates
 
-Check \`templates/\` for examples. Copy and modify.
+Check \`templates/\` for examples.
 
-## What happens next
-
-1. Human reviews your draft
-2. If feedback: you revise and run \`content mv revised <file>\`
-3. Human reviews again and approves
-4. Posting happens manually
-
-You'll never see the posting happen — that's intentional for safety.
+You'll never see posting happen — that's intentional for safety.
 `);
       console.log(chalk.green(`✓ Created ${agentPath}`));
     }
@@ -396,12 +377,14 @@ You'll never see the posting happen — that's intentional for safety.
     
     console.log(chalk.blue('\n✨ Content pipeline initialized!'));
     console.log(chalk.yellow('Please review and update the templates in ./templates/'));
-    console.log('\nBuilt-in platforms: linkedin, x, reddit (experimental)');
+    console.log('\nBuilt-in platforms: linkedin, x, reddit, devto, hashnode');
     console.log('To authenticate:');
     console.log(chalk.gray('  content auth linkedin'));
     console.log(chalk.gray('  content auth x'));
     console.log(chalk.gray('  content auth reddit'));
-    
+    console.log(chalk.gray('  content auth devto'));
+    console.log(chalk.gray('  content auth hashnode'));
+
     if (!options.secure && !isSecureSigningEnabled()) {
       console.log(chalk.yellow('\n💡 Tip: Run with --secure to enable cryptographic approval'));
     }
@@ -410,7 +393,7 @@ You'll never see the posting happen — that's intentional for safety.
 // Auth command
 program
   .command('auth <platform>')
-  .description('Authenticate with a platform (linkedin, x, reddit)')
+  .description('Authenticate with a platform (linkedin, x, reddit, devto, hashnode)')
   .action(async (platform: string) => {
     const p = platform.toLowerCase();
     
@@ -511,7 +494,7 @@ program
     
     if (!plugin) {
       console.error(chalk.red(`No poster found for platform: ${post.frontmatter.platform}`));
-      console.log(chalk.gray('Built-in platforms: linkedin, x, reddit (experimental)'));
+      console.log(chalk.gray('Built-in platforms: linkedin, x, reddit, devto, hashnode'));
       console.log(chalk.gray('For other platforms, add a plugin to .content-pipeline.json'));
       process.exit(1);
     }

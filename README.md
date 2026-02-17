@@ -2,16 +2,14 @@
 
 Safe content automation for AI agents. Draft → Review → Revise → Approve → Post.
 
-**The pattern**: Your AI drafts content. You review and give feedback. They revise. You approve. You post.
-
-Built for [OpenClaw](https://github.com/openclaw/openclaw) — your agent gets notified automatically when you give feedback.
+**The pattern**: Your AI drafts content. You review and give feedback. A [pi](https://github.com/mariozechner/pi) agent rewrites it in your voice. You approve. You post.
 
 ## Why?
 
 AI agents shouldn't post directly to social media. Too risky. But they're great at drafting.
 
 This kit enforces human-in-the-loop:
-- **Agent** → writes drafts, revises based on feedback
+- **Agent** → writes drafts, pi rewrites based on your feedback
 - **Human** → reviews, gives feedback, approves, posts
 
 ## Install
@@ -20,7 +18,9 @@ This kit enforces human-in-the-loop:
 npm install -g agent-content-pipeline
 ```
 
-Includes built-in posters for **LinkedIn**, **X/Twitter**, and **Reddit (experimental)**.
+Requires [pi](https://github.com/mariozechner/pi) on your PATH for the rewrite step.
+
+Includes built-in posters for **LinkedIn**, **X/Twitter**, **Reddit (experimental)**, **dev.to**, and **Hashnode**.
 
 ## Quick Start
 
@@ -30,17 +30,20 @@ content init .
 
 # 2. Authenticate (once per platform)
 content auth linkedin    # Opens browser for login
-content auth x           # Extracts tokens from Firefox (or paste cookies manually if Firefox fails)
+content auth x           # Extracts tokens from Firefox (or paste manually)
 content auth reddit      # Creates Reddit API app credentials
+content auth devto       # dev.to API key
+content auth hashnode    # Hashnode token + publication ID
 
-# 3. Your agent writes to drafts/
+# 3. Create a new post request — pi drafts it in your voice
+content new
 
 # 4. Review: give feedback OR approve
 content review drafts/my-post.md
-# → Enter feedback → moves to reviewed/, notifies agent
-# → No feedback → asks "Approve?" → moves to approved/
+# → Enter feedback → pi rewrites it → moved to revised/
+# → No feedback → asks "Approve?" → moved to approved/
 
-# 5. Agent revises (if feedback given), you review again
+# 5. Review the revised version, repeat until happy
 
 # 6. Post when approved
 content post approved/my-post.md
@@ -53,12 +56,12 @@ CLI command: `content` (alias: `content-pipeline`).
 ## Content Folders
 
 ```
-drafts/        # Agent writes here
-reviewed/      # You reviewed, awaiting agent revision
-revised/       # Agent revised, ready for another look
+drafts/        # Initial drafts land here
+reviewed/      # You reviewed, pi is rewriting
+revised/       # Rewritten, ready for another look
 approved/      # You approved, ready to post
 posted/        # Archive after posting
-templates/     # Review and customize these templates
+templates/     # Review and customize these
 .content-pipeline/threads/  # Feedback thread logs (not posted)
 ```
 
@@ -68,12 +71,14 @@ templates/     # Review and customize these templates
 ┌─────────┐     ┌──────────┐     ┌─────────┐     ┌──────────┐     ┌────────┐
 │ drafts/ │ ──▶ │ reviewed/│ ──▶ │ revised/│ ──▶ │ approved/│ ──▶ │ posted/│
 └─────────┘     └──────────┘     └─────────┘     └──────────┘     └────────┘
-   agent          human            agent           human           human
-   writes         reviews          revises         approves        posts
+  agent/pi        human            pi rewrites      human           human
+  drafts          reviews          in your voice    approves        posts
                      ▲                │
                      └────────────────┘
                       more feedback
 ```
+
+When you give feedback in `content review`, pi spins up with `claude-opus-4-6` and the scribe skill loaded, rewrites the draft in your voice, and drops the result into `revised/`. No manual agent interaction needed.
 
 ## Secure Mode (Cryptographic Approval)
 
@@ -93,9 +98,6 @@ This creates an Ed25519 signing keypair:
 3. When posting, the signature is verified
 4. If content was modified after approval, posting is blocked
 
-**Why use it?**
-Because you don't want to give the credentials to your social media to your AI agent. You can still automate posting in a boring deterministic process of course.
-
 **Files:**
 - `.content-pipeline-key` — your encrypted keypair (add to `.gitignore`!)
 - Approved posts get `approval_signature` and `content_hash` in frontmatter
@@ -104,75 +106,62 @@ Because you don't want to give the credentials to your social media to your AI a
 
 ```bash
 # Setup
-content init <dir>        # Initialize content structure + global config
+content init <dir>              # Initialize content structure + global config
 content init <dir> --secure     # Also enable cryptographic approval signatures
-content auth <platform>   # Authenticate (linkedin, x, reddit)
+content auth <platform>         # Authenticate (linkedin, x, reddit, devto, hashnode)
 
 # Workflow
-content list              # Show all folders with timestamps
-content review <file>     # Review: give feedback OR approve (if no feedback)
-content mv <dest> <file>  # Move file to drafts/reviewed/revised/approved/posted
-content edit <file>       # Open in $EDITOR
-content post <file>       # Post (shows preview, asks confirmation)
-content post <file> -n    # Dry-run (--dry-run)
-content thread <file>     # Add a note to the feedback thread
+content new                     # Create a post request, pi drafts it in your voice
+content list                    # Show all folders with timestamps
+content review <file>           # Review: give feedback (pi rewrites) OR approve
+content mv <dest> <file>        # Move file to drafts/reviewed/revised/approved/posted
+content edit <file>             # Open in $EDITOR
+content post <file>             # Post (shows preview, asks confirmation)
+content post <file> -n          # Dry-run (--dry-run)
+content thread <file>           # Add a note to the feedback thread
+content platforms               # List available platforms
 ```
 
 ## Platforms
 
 ### LinkedIn
 - Playwright browser automation
-- Session encrypted in `~/.content-pipeline/`
+- Session stored in `~/.content-pipeline/`
 
 ### X (Twitter)
 - Uses [bird CLI](https://github.com/steipete/bird)
-- Tokens extracted from Firefox, encrypted with password (or stored unencrypted if you choose)
-- If Firefox auth fails, you can paste `auth_token` and `ct0` manually
-
-Manual cookie steps:
-1) Open x.com and log in
-2) Open DevTools → Application/Storage → Cookies → https://x.com
-3) Copy `auth_token` and `ct0`
+- Tokens extracted from Firefox, or paste `auth_token` and `ct0` manually:
+  1. Open x.com and log in
+  2. DevTools → Application → Cookies → https://x.com
+  3. Copy `auth_token` and `ct0`
 
 ### Reddit (experimental)
 - Uses [snoowrap](https://github.com/not-an-aardvark/snoowrap) API wrapper
 - Requires a Reddit "script" app (create at reddit.com/prefs/apps)
-- Credentials encrypted in `~/.content-pipeline/`
 - Frontmatter requires `subreddit:` field
 
-## OpenClaw Integration
+### dev.to
+- Uses [@sinedied/devto-cli](https://github.com/sinedied/devto-cli) via npx
+- Get your API key at https://dev.to/settings/extensions
+- Frontmatter: `title` required, `tags` optional
 
-If you're using [OpenClaw](https://github.com/openclaw/openclaw), content automatically notifies your agent when you give review feedback.
+### Hashnode
+- Direct GraphQL API
+- Get your Personal Access Token at https://hashnode.com/settings/developer
+- Find your Publication ID at https://hashnode.com/settings/blogs
+- Frontmatter: `title` required, `tags` (array of slugs), `canonical_url`, `cover_image` optional
 
-**How it works:**
-1. `content init <dir>` auto-detects OpenClaw and saves its path to `.content-pipeline.json`
-2. When you run `content review <file>` and enter feedback
-3. The feedback is saved to the draft file
-4. Your agent receives a message with the feedback and instructions to revise
+## pi Integration
 
-**The agent sees:**
-```
-📝 Review feedback for 2025-01-30-linkedin-post.md:
+The rewrite step uses [pi](https://github.com/mariozechner/pi) in headless RPC mode:
 
-"Make the intro punchier, less formal"
+- Model: `claude-opus-4-6`
+- Skill: `scribe` (loads your voice guidelines before rewriting)
+- Triggered automatically on `content review` (when you give feedback) and `content new`
 
-Read the draft at reviewed/..., apply the feedback, 
-then run:
+Pi must be installed and on your PATH, and you need a configured Anthropic API key. If pi is not found, the rewrite step is skipped and the draft is left as-is.
 
-content mv revised "2025-01-30-linkedin-post.md"
-
-Then confirm what you changed (you can also add a note with: content thread "2025-01-30-linkedin-post.md" --from agent).
-```
-
-This creates a seamless review loop — you give feedback in terminal, agent responds in chat.
-
-**Manual config** (if auto-detect fails):
-```json
-{
-  "clawdbotPath": "/path/to/clawdbot",
-  "clawdbotTarget": "telegram:123456789"
-}
-```
+The scribe skill is loaded from your pi skill directory (`~/.pi/agent/skills/scribe/`). If you don't have it, the rewrite still runs but without voice-specific guidance.
 
 ## For AI Agents
 
