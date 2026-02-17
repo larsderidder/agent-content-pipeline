@@ -55,6 +55,19 @@ export interface ContentKitConfig {
   xProfileDir?: string;
   /** Global workspace directory (set in ~/.content-pipeline.json) */
   workspaceDir?: string;
+  /** pi model to use for the rewrite step (default: anthropic/claude-opus-4-6) */
+  piModel?: string;
+  /**
+   * pi skill name to activate before rewriting (e.g. "scribe").
+   * The skill must exist in your pi skill directory (~/.pi/agent/skills/).
+   * If omitted or not found, a built-in default prompt is used instead.
+   */
+  piSkill?: string;
+  /**
+   * System prompt to use for the pi rewrite step when no piSkill is configured.
+   * Defaults to a built-in prompt if not set.
+   */
+  piSystemPrompt?: string;
 }
 
 /**

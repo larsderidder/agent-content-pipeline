@@ -153,15 +153,29 @@ content platforms               # List available platforms
 
 ## pi Integration
 
-The rewrite step uses [pi](https://github.com/mariozechner/pi) in headless RPC mode:
+The rewrite step uses [pi](https://github.com/mariozechner/pi) in headless RPC mode. It is triggered automatically on `content review` (when you give feedback) and `content new`.
 
-- Model: `claude-opus-4-6`
-- Skill: `scribe` (loads your voice guidelines before rewriting)
-- Triggered automatically on `content review` (when you give feedback) and `content new`
+Pi must be installed and on your PATH with a configured API key. If pi is not found the rewrite step is skipped and the draft is left unchanged.
 
-Pi must be installed and on your PATH, and you need a configured Anthropic API key. If pi is not found, the rewrite step is skipped and the draft is left as-is.
+### Configuration
 
-The scribe skill is loaded from your pi skill directory (`~/.pi/agent/skills/scribe/`). If you don't have it, the rewrite still runs but without voice-specific guidance.
+Add any of these to your `.content-pipeline.json`:
+
+```json
+{
+  "piModel": "anthropic/claude-opus-4-6",
+  "piSkill": "scribe",
+  "piSystemPrompt": "You are a concise, direct writer. No filler. Match the author's voice."
+}
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `piModel` | `anthropic/claude-opus-4-6` | Any model available in your pi install |
+| `piSkill` | *(none)* | Pi skill name to activate before rewriting. Must exist at `~/.pi/agent/skills/<name>/SKILL.md`. |
+| `piSystemPrompt` | built-in | System prompt used when no skill is configured. Ignored if `piSkill` is set and found. |
+
+If `piSkill` is set but the skill file is not found on disk, the tool warns and falls back to the system prompt.
 
 ## For AI Agents
 

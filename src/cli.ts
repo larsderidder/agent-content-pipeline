@@ -73,13 +73,35 @@ function slugify(input: string): string {
  * We pipe JSON-RPC commands over stdin and collect the final assistant text
  * from the event stream on stdout.
  */
+const DEFAULT_PI_SYSTEM_PROMPT =
+  `You are a content rewriting assistant. ` +
+  `Rewrite drafts to be clear, direct, and well-structured for the target platform. ` +
+  `Match the tone already present in the draft. Remove filler, tighten sentences, and preserve the author's intent. ` +
+  `Do not add generic AI-sounding phrases or unnecessary hedging.`;
+
+/**
+ * Check whether a pi skill exists in the default skill directory.
+ */
+function piSkillExists(skillName: string): boolean {
+  const skillPath = join(homedir(), '.pi', 'agent', 'skills', skillName, 'SKILL.md');
+  return existsSync(skillPath);
+}
+
+/**
+ * Spawn a pi agent in RPC mode to rewrite a draft.
+ *
+ * If a skill is configured (via config.piSkill) and exists on disk, it is
+ * activated before the rewrite prompt. Otherwise pi runs with a built-in
+ * default system prompt (or config.piSystemPrompt if set) and the rewrite
+ * prompt is sent directly in one round-trip.
+ */
 async function runPiRewrite(
   filePath: string,
   instructions: string,
+  config: ReturnType<typeof loadConfig>,
 ): Promise<void> {
-  const piPath = 'pi'; // Expected to be on PATH
+  const piPath = 'pi';
 
-  // Check pi is available
   try {
     execSync('which pi', { stdio: 'ignore' });
   } catch {
@@ -87,19 +109,29 @@ async function runPiRewrite(
     return;
   }
 
+  const model = config.piModel ?? 'anthropic/claude-opus-4-6';
+  const skillName = config.piSkill;
+  const useSkill = skillName != null && piSkillExists(skillName);
+  const systemPrompt = config.piSystemPrompt ?? DEFAULT_PI_SYSTEM_PROMPT;
+
+  const spawnArgs = ['--mode', 'rpc', '--no-session', '--model', model];
+  if (!useSkill) {
+    // No skill: pass system prompt directly so we only need one round-trip
+    spawnArgs.push('--system-prompt', systemPrompt);
+  }
+
+  if (skillName && !useSkill) {
+    console.log(chalk.yellow(`⚠ pi skill "${skillName}" not found — using built-in prompt`));
+  }
+
   const currentContent = readFileSync(filePath, 'utf8');
 
-  const child = spawn(
-    piPath,
-    ['--mode', 'rpc', '--no-session', '--model', 'anthropic/claude-opus-4-6'],
-    { stdio: ['pipe', 'pipe', 'pipe'] },
-  );
+  const child = spawn(piPath, spawnArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
 
   let outputText = '';
   let agentEnded = false;
 
   const rl = createInterface({ input: child.stdout! });
-
   rl.on('line', (line) => {
     let event: Record<string, unknown>;
     try {
@@ -128,61 +160,51 @@ async function runPiRewrite(
     child.stdin!.write(JSON.stringify(cmd) + '\n');
   };
 
-  // Wait briefly for the process to start, then send commands
+  const waitForAgentEnd = (timeoutMs = 120_000) =>
+    new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error(`pi agent timed out after ${timeoutMs / 1000}s`));
+      }, timeoutMs);
+      const check = () => {
+        if (agentEnded) {
+          clearTimeout(timer);
+          resolve();
+        } else {
+          setTimeout(check, 200);
+        }
+      };
+      setTimeout(check, 300);
+    });
+
+  // Brief pause for process startup
   await new Promise<void>((resolve) => setTimeout(resolve, 300));
 
-  // 1. Activate scribe skill
-  sendCmd({ type: 'prompt', message: '/skill:scribe' });
+  if (useSkill) {
+    // Activate the skill first, then send the rewrite prompt
+    sendCmd({ type: 'prompt', message: `/skill:${skillName}` });
+    await waitForAgentEnd();
 
-  // Wait for scribe skill activation to complete before sending main prompt
-  await new Promise<void>((resolve) => {
-    const check = () => {
-      if (agentEnded) {
-        agentEnded = false; // reset for next prompt
-        outputText = '';    // reset output; skill activation text is not the rewrite
-        resolve();
-      } else {
-        setTimeout(check, 200);
-      }
-    };
-    setTimeout(check, 500);
-  });
+    agentEnded = false;
+    outputText = ''; // discard skill activation output
+  }
 
-  // 2. Send the rewrite prompt
-  const prompt =
-    `You are rewriting a content draft based on review feedback. ` +
-    `Apply the scribe guidelines and Lars's voice to the revised content.\n\n` +
-    `## Instructions from the reviewer\n\n${instructions}\n\n` +
-    `## Current draft content\n\n${currentContent}\n\n` +
-    `Output ONLY the revised file content (frontmatter + body), no commentary.`;
+  const rewritePrompt =
+    `Rewrite the following content draft based on these instructions. ` +
+    `Output ONLY the revised file content (frontmatter + body), no commentary.\n\n` +
+    `## Instructions\n\n${instructions}\n\n` +
+    `## Current draft\n\n${currentContent}`;
 
-  sendCmd({ type: 'prompt', message: prompt });
-
-  // Wait for second agent_end
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      child.kill();
-      reject(new Error('pi agent timed out after 120s'));
-    }, 120_000);
-
-    const check = () => {
-      if (agentEnded) {
-        clearTimeout(timeout);
-        resolve();
-      } else {
-        setTimeout(check, 200);
-      }
-    };
-    setTimeout(check, 500);
-  });
+  sendCmd({ type: 'prompt', message: rewritePrompt });
+  await waitForAgentEnd();
 
   child.stdin!.end();
 
-  // Write result back to file if we got something
   const trimmed = outputText.trim();
   if (trimmed.length > 50) {
     writeFileSync(filePath, trimmed + '\n');
-    console.log(chalk.green('✓ pi rewrote draft using scribe skill'));
+    const via = useSkill ? `skill:${skillName}` : 'built-in prompt';
+    console.log(chalk.green(`✓ pi rewrote draft (${via})`));
   } else {
     console.log(chalk.yellow('⚠ pi returned no usable output — draft unchanged'));
   }
@@ -693,10 +715,10 @@ program
           renameSync(filePath, reviewedPath);
           console.log(chalk.green(`\n✓ Feedback saved, moved to reviewed/`));
 
-          // Run pi rewrite with scribe skill
-          console.log(chalk.blue('🤖 Running pi rewrite with scribe skill...'));
+          // Run pi rewrite
+          console.log(chalk.blue('🤖 Running pi rewrite...'));
           try {
-            await runPiRewrite(reviewedPath, feedback);
+            await runPiRewrite(reviewedPath, feedback, config);
           } catch (err) {
             console.log(chalk.yellow(`⚠ pi rewrite failed: ${(err as Error).message}`));
           }
@@ -873,7 +895,7 @@ program
             `Output ONLY the revised file content (frontmatter + body), no commentary.\n\n` +
             `Brief:\n${brief}`;
           try {
-            await runPiRewrite(filePath, draftInstructions);
+            await runPiRewrite(filePath, draftInstructions, config);
           } catch (err) {
             console.log(chalk.yellow(`⚠ pi draft failed: ${(err as Error).message}`));
           }
