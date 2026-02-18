@@ -23,4 +23,8 @@ jobs:
 
       - run: npm run build
 
-      - run: npm publish --provenance --access public
+      - uses: npm/publish@v2
+        with:
+          tag: latest
+          provenance: true
+          access: public
